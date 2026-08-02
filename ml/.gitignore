@@ -1,0 +1,6 @@
+*.venv
+*.txt
+*.pyc
+*.pt
+*.bin
+*.log
