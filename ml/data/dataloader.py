@@ -5,17 +5,42 @@ import torch
 from datasets import load_dataset
 from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
-from transformers import AutoTokenizer
 
 from ..configs import baseConfig
+from .tokenizer import train_tokenizer
 
-ROOT = Path(__file__).resolve().parent
-config = baseConfig()
+
+def count_params(vocab_size):
+    from ..models.base.transformer import BaseTransformer
+
+    config = baseConfig()
+
+    model = BaseTransformer(
+        d_model=config.d_model,
+        n_heads=config.heads,
+        dropout=config.dropout,
+        num_layers=config.layers,
+        vocab_size=vocab_size,
+        max_seq_len=1024,
+    )
+
+    total = 0
+
+    for name, param in model.named_parameters():
+        count = param.numel()
+        total += count
+        print(f"{name:70s} {count/1e6:.3f}M")
+
+    print(f"\nTotal: {total/1e6:.3f}M")
+
+    return total
+
 
 def prepare_corpus(target_token_length, tokenizer, dataset_name="HuggingFaceFW/fineweb", dataset_config="sample-10BT",dtype=np.uint16):
 
-    assert tokenizer.vocab_size <= np.iinfo(dtype).max, f"vocab too large for {dtype}"
+    assert tokenizer.get_vocab_size() <= np.iinfo(dtype).max, f"vocab too large for {dtype}"
 
+    ROOT = Path(__file__).resolve().parent
 
     file_name = f"{target_token_length}_tokens_{dataset_name.replace("/", "_")}.bin"
     bin_path = ROOT/ "datasets" / file_name
@@ -33,20 +58,25 @@ def prepare_corpus(target_token_length, tokenizer, dataset_name="HuggingFaceFW/f
         streaming=True,
     )
 
-    eos_id = tokenizer.eos_token_id  # <|endoftext|> for gpt2, id 50256
+    eos_id = tokenizer.token_to_id("<eos>")
 
     total_tokens = 0
 
     with open(bin_path, "wb") as out:
-        for sample in tqdm(dataset, unit="doc"):
-            ids = tokenizer.encode(sample["text"])
+
+        pbar = tqdm(total=target_token_length, unit="tok")
+        for sample in dataset:
+            ids = tokenizer.encode(sample["text"]).ids
             ids.append(eos_id)
 
             np.asarray(ids, dtype=np.uint16).tofile(out)
             total_tokens += len(ids)
 
+            pbar.update(len(ids))
+
             if total_tokens >= target_token_length:
                 break
+        pbar.close()
 
     if total_tokens < target_token_length:
         print(f"Warning: only got {total_tokens} tokens, wanted {target_token_length}")
@@ -91,27 +121,6 @@ def get_dataloaders(train_tokens, val_tokens, context_length, batch_size):
 
     return train_loader, val_loader
 
-def calculate_tokens(config, vocab_size, tokens_per_param=20):
-    d_model = config.d_model
-    layers = config.layers
-
-    # embedding, tied with output projection, counted once
-    embedding_params = vocab_size * d_model
-
-    # per decoder layer: attention (q,k,v,out) + FFN (4x expansion, up+down)
-    attn_params_per_layer = 4 * d_model ** 2
-    ffn_params_per_layer = 8 * d_model ** 2
-    params_per_layer = attn_params_per_layer + ffn_params_per_layer
-
-    total_params = embedding_params + layers * params_per_layer
-
-    target_tokens = int(total_params * tokens_per_param)
-
-    print(f"Estimated params: {total_params:,}")
-    print(f"Target tokens (~{tokens_per_param}x params): {target_tokens:,}")
-
-    return target_tokens
-
 
 class LanguageModelDataset(Dataset):
     def __init__(self, token_ids, context_length):
@@ -129,10 +138,12 @@ class LanguageModelDataset(Dataset):
 
         return x, y
 
-def build_dataset(config, dataset_name="HuggingFaceFW/fineweb", dataset_config="sample-10BT", dtype=np.uint16):
+def build_dataset(config, dataset_name="HuggingFaceFW/fineweb", dataset_config="sample-10BT", dtype=np.uint16,tokens_per_param=20):
 
-    tokenizer = AutoTokenizer.from_pretrained("gpt2",use_fast=True)
-    target_tokens = calculate_tokens(config, vocab_size=tokenizer.vocab_size)
+    tokenizer = train_tokenizer()
+
+    # chinchilla_scaling
+    target_tokens = int(count_params(vocab_size=tokenizer.get_vocab_size()) * tokens_per_param)
 
     bin_path = prepare_corpus(
         target_token_length=target_tokens,
@@ -155,9 +166,12 @@ def build_dataset(config, dataset_name="HuggingFaceFW/fineweb", dataset_config="
     return train_loader, val_loader,target_tokens, tokenizer
 
 if __name__ == '__main__':
-    tokenizer = AutoTokenizer.from_pretrained("gpt2",use_fast=True)
+
+    ROOT = Path(__file__).resolve().parent
+
+    tokenizer = train_tokenizer()
 
     config = baseConfig()
 
-    total_tokens = calculate_tokens(config=config,vocab_size=tokenizer.vocab_size)
+    total_tokens = count_params(tokenizer.get_vocab_size())
     prepare_corpus(target_token_length=total_tokens,tokenizer=tokenizer)

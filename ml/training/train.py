@@ -4,7 +4,12 @@ from pathlib import Path
 
 import torch
 import torch.nn as nn
-from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR, SequentialLR, ConstantLR
+from torch.optim.lr_scheduler import (
+    ConstantLR,
+    CosineAnnealingLR,
+    LinearLR,
+    SequentialLR,
+)
 from tqdm import tqdm
 
 import wandb
@@ -22,7 +27,7 @@ config = baseConfig()
 train_loader, val_loader,total_tokens,tokenizer = build_dataset(config=config)
 
 ROOT = Path(__file__).resolve().parent.parent
-checkpoint_path = ROOT / "outputs" / "init_layers_plus_lr_checkpoint.pt"
+checkpoint_path = ROOT / "outputs" / "tokenizer_change_plus_increased_dims_checkpoint.pt"
 
 
 wandb.init(
@@ -36,7 +41,7 @@ model = BaseTransformer(
     n_heads=config.heads,
     dropout=config.dropout,
     num_layers=config.layers,
-    vocab_size=tokenizer.vocab_size,
+    vocab_size=tokenizer.get_vocab_size(),
     max_seq_len=1024
     ).to(device)
 
@@ -91,7 +96,7 @@ def validate():
             with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
                 logits = model(input_ids, True)
                 loss = criterion(
-                    logits.view(-1, tokenizer.vocab_size),
+                    logits.view(-1, tokenizer.get_vocab_size()),
                     output_ids.view(-1),
                 )
 
@@ -113,11 +118,6 @@ def save_checkpoint(global_step):
         },
         checkpoint_path,
     )
-    # optional: version the checkpoint as a wandb Artifact
-    artifact = wandb.Artifact(f"checkpoint-{global_step}", type="model")
-    # artifact.add_file(ckpt_path)
-    wandb.log_artifact(artifact)
-
 
 global_step = 0
 eval_every = 2_000
@@ -138,7 +138,7 @@ while global_step < config.max_steps:
         with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
             outputs = model(input_ids, True)
             loss = criterion(
-                outputs.view(-1, tokenizer.vocab_size),
+                outputs.view(-1, tokenizer.get_vocab_size()),
                 output_ids.view(-1),
             )
 

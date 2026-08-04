@@ -5,10 +5,11 @@ from transformers import AutoTokenizer
 
 from ..configs import baseConfig
 from ..models.base.transformer import BaseTransformer
+from ..data.tokenizer import train_tokenizer
 
 config = baseConfig()
 
-tokenizer = AutoTokenizer.from_pretrained("gpt2",use_fast=True)
+tokenizer = train_tokenizer()
 
 
 device = torch.device("cuda")
@@ -18,12 +19,12 @@ model = BaseTransformer(
     n_heads=config.heads,
     dropout=config.dropout,
     num_layers=config.layers,
-    vocab_size=tokenizer.vocab_size,
+    vocab_size=tokenizer.get_vocab_size(),
     max_seq_len=1024,
 ).to(device)
 
 ROOT = Path(__file__).resolve().parent.parent
-path = ROOT / "outputs"  / "lr_fix_checkpoint.pt"
+path = ROOT / "outputs"  / "tokenizer_change_plus_increased_dims_checkpoint.pt"
 
 checkpoint = torch.load(path, map_location=device)
 
@@ -31,7 +32,7 @@ model.load_state_dict(checkpoint["model"])
 model.eval()
 
 input_ids = torch.tensor(
-    tokenizer.encode("If Superman had explored these issues instead of bashing unions"),
+    tokenizer.encode("tell me about france").ids,
     dtype=torch.long
 ).unsqueeze(0).to(device)
 
