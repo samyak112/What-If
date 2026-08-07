@@ -1,3 +1,5 @@
+
+import random
 from pathlib import Path
 
 from datasets import load_dataset
@@ -8,10 +10,17 @@ from tokenizers.pre_tokenizers import ByteLevel
 from tokenizers.trainers import BpeTrainer
 
 
-def train_tokenizer():
+def train_tokenizer(datasets,vocab_size):
+
 
     ROOT = Path(__file__).resolve().parent
-    path = ROOT / "fineweb_tokenizer.json"
+
+
+    file_name = "_".join(
+        name.replace("/", "_") for name, _, _ in datasets
+    )
+
+    path = ROOT / f"{file_name}.json"
 
     # Load existing tokenizer
     if path.exists():
@@ -25,7 +34,7 @@ def train_tokenizer():
     tokenizer.pre_tokenizer = ByteLevel()
 
     trainer = BpeTrainer(
-        vocab_size=16384,
+        vocab_size=vocab_size,
         min_frequency=2,
         special_tokens=[
             "<unk>",
@@ -35,17 +44,41 @@ def train_tokenizer():
         ]
     )
 
-    dataset = load_dataset(
-        "HuggingFaceFW/fineweb",
-        "sample-10BT",
-        split="train",
-        streaming=True
-    )
+    streams = []
+    weights = []
+
+    for dataset_name, dataset_config, weight in datasets:
+
+        dataset = load_dataset(
+            dataset_name,
+            name=dataset_config,
+            split="train",
+            streaming=True
+        )
+
+        streams.append(iter(dataset))
+        weights.append(weight)
 
     def text_iterator():
-        for i, sample in enumerate(dataset):
-            if i >= 1_000_000:
-                break
+
+        seen = 0
+        max_samples = 1_000_000
+
+        while seen < max_samples:
+
+            idx = random.choices(
+                range(len(streams)),
+                weights=weights,
+                k=1
+            )[0]
+
+            try:
+                sample = next(streams[idx])
+            except StopIteration:
+                continue
+
+            seen += 1
+
             yield sample["text"]
 
     tokenizer.train_from_iterator(
