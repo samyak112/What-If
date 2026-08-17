@@ -10,7 +10,7 @@ Pre-LN decoder-only Transformer. `d_model=384, heads=8, layers=10, context_lengt
 
 ## Data
 
-BPE tokenizer trained from scratch. 80% FineWeb / 20% WikiText-103, streamed and tokenized to `.bin` files, token budget = `20 * param_count`. Val loss tracked per-dataset and as a blend.
+BPE tokenizer trained from scratch, streamed and tokenized to `.bin` files, token budget = `20 * param_count`. Val loss tracked per-dataset and as a blend.
 
 ## Training
 
