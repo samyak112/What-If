@@ -3,9 +3,9 @@ from dataclasses import dataclass, field
 
 @dataclass
 class baseConfig:
-    d_model: int = 384
-    heads: int = 8
-    layers: int = 10
+    d_model: int = 256
+    heads: int = 4
+    layers: int = 6
 
     context_length: int = 768
     dropout: float = 0.0
@@ -21,7 +21,6 @@ class baseConfig:
     batch_size: int = 32
     datasets: list[tuple[str, str, float]] = field(
         default_factory=lambda: [
-            ("HuggingFaceFW/fineweb", "sample-10BT", 0.8),
-            ("Salesforce/wikitext", "wikitext-103-raw-v1", 0.2),
+            ("roneneldan/TinyStories", "default", 1),
         ]
     )

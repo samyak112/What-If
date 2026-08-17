@@ -1,2 +1,6 @@
 wandb/
 runs/
+*.pyc
+*.bin
+*.json
+*.pt

@@ -21,7 +21,7 @@ config = baseConfig()
 
 train_loader, val_loaders, total_tokens, tokenizer = build_dataset(config=config)
 
-checkpoint_path = ROOT / "outputs" / "best_new.pt"
+checkpoint_path = ROOT / "outputs" / "wrong_init.pt"
 
 wandb.init(
     project="what-if",

@@ -9,7 +9,7 @@ class DecoderBlock(nn.Module):
 
         self.ffn = nn.Sequential(
             nn.Linear(d_model, d_model * 4),
-            nn.GELU(),
+            nn.GELU(approximate='tanh'),
             nn.Dropout(dropout),
             nn.Linear(d_model * 4, d_model),
         )
@@ -21,15 +21,21 @@ class DecoderBlock(nn.Module):
             batch_first=True
         )
 
-        # ---- 1. First, initialise ALL linear layers to a clean baseline ----
+        # Scale for residual projections
+        scale = (2 * num_layers) ** -0.5
+
+        # 1. Initialise ALL linear layers normally
         for module in self.modules():
-            if isinstance(module, nn.Linear):
+            if isinstance(module, nn.Linear) and module not in (self.attn.out_proj, self.ffn[-1]):
                 nn.init.normal_(module.weight, mean=0.0, std=0.02)
                 if module.bias is not None:
                     nn.init.zeros_(module.bias)
 
-        # ---- 2. Then apply the special scaled init to the residual projections ----
-        scale = (2 * num_layers) ** -0.5
+        # 2. Initialise the QKV projection (it’s a Parameter, not a Linear layer)
+        nn.init.normal_(self.attn.in_proj_weight, mean=0.0, std=0.02)
+        nn.init.zeros_(self.attn.in_proj_bias)
+
+        # 3. Apply the scaled init to the two residual projections
         nn.init.normal_(self.attn.out_proj.weight, mean=0.0, std=0.02 * scale)
         nn.init.zeros_(self.attn.out_proj.bias)
         nn.init.normal_(self.ffn[-1].weight, mean=0.0, std=0.02 * scale)

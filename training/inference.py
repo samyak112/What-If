@@ -9,6 +9,11 @@ from ..data.tokenizer import train_tokenizer
 config = baseConfig()
 tokenizer = train_tokenizer(config.datasets,config.vocab_size)
 
+SEED = 42
+
+torch.manual_seed(SEED)
+torch.cuda.manual_seed_all(SEED)
+
 device = torch.device("cuda")
 
 model = BaseTransformer(
@@ -21,8 +26,7 @@ model = BaseTransformer(
 ).to(device)
 
 ROOT = Path(__file__).resolve().parent.parent
-path = ROOT / "outputs" / "best_new_blend.pt"
-
+path = ROOT / "outputs" / "wrong_init_blend.pt"
 checkpoint = torch.load(path, map_location=device)
 model.load_state_dict(checkpoint["model"])
 model.eval()
@@ -31,8 +35,7 @@ model.eval()
 eos_id = tokenizer.token_to_id("<eos>")
 max_length = 768
 
-# Prompt
-prompt = "In order to understand climate change, it is important to"
+prompt = str(input("enter prompt here\n"))
 input_ids = torch.tensor(
     tokenizer.encode(prompt).ids,
     dtype=torch.long
@@ -50,7 +53,7 @@ with torch.no_grad(), torch.autocast(device_type="cuda", dtype=torch.float16):
             next_logits[0, token_id] = logit / 1.2 if logit > 0 else logit * 1.2
 
         # ---- Temperature scaling ----
-        temperature = 0.7
+        temperature = 0.8
         next_logits = next_logits / temperature
 
         # ---- Top‑p (nucleus) sampling ----
@@ -58,7 +61,7 @@ with torch.no_grad(), torch.autocast(device_type="cuda", dtype=torch.float16):
         cumulative_probs = torch.cumsum(F.softmax(sorted_logits, dim=-1), dim=-1)
 
         # Remove tokens with cumulative probability above the threshold
-        p = 0.95
+        p = 0.90
         sorted_mask = cumulative_probs > p
         # Shift the mask to keep the first token that exceeds the threshold
         sorted_mask[..., 1:] = sorted_mask[..., :-1].clone()
